@@ -48,7 +48,7 @@ type StandaloneService interface {
 	Release(ctx context.Context, record RequestRecord) error
 }
 
-func NewEmbeddedService(ctx context.Context, conn *sql.DB, config EmbeddedServiceConfig) (EmbeddedService, error) {
+func NewEmbeddedService(ctx context.Context, db *sql.DB, config EmbeddedServiceConfig) (EmbeddedService, error) {
 	s := embeddedService {
 		config: config,
 		insertStmt: fmt.Sprintf(`insert into %s (id, created_at, updated_at) values($1, $2, $3)`, config.TableName),
@@ -59,7 +59,7 @@ func NewEmbeddedService(ctx context.Context, conn *sql.DB, config EmbeddedServic
 	return &s, nil
 }
 
-func NewStandaloneService(ctx context.Context, conn *sql.DB, config StandaloneServiceConfig) (StandaloneService, error) {
+func NewStandaloneService(ctx context.Context, db *sql.DB, config StandaloneServiceConfig) (StandaloneService, error) {
 	return nil, errors.New("not implemented yet")
 }
 
