@@ -1,0 +1,26 @@
+docker pull postgres
+
+docker run --name postgres -p 5432:5432 -e POSTGRES_PASSWORD=Test123!  -d postgres
+
+docker stop postgres
+docker rm -v postgres
+
+docker exec -it postgres /usr/bin/psql -U postgres
+
+CREATE TABLE request_record (
+   id varchar(255) PRIMARY KEY,
+   result bytea,
+   created_at timestamp,
+   updated_at timestamp
+);
+
+CREATE TABLE resource (
+   id serial PRIMARY KEY,
+   something varchar(255),
+   created_at timestamp
+);
+
+delete from request_record;
+
+go get github.com/lib/pq
+go get github.com/rs/zerolog
