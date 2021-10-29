@@ -9,7 +9,7 @@ func main() {
 
 	p, n := 0, 0
 
-	c := 10000
+	c := 100
 	b := make([]byte, c)
 	_, err := rand.Read(b)
 	if err != nil {

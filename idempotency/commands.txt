@@ -11,7 +11,9 @@ CREATE TABLE request_record (
    id varchar(255) PRIMARY KEY,
    result bytea,
    created_at timestamp,
-   updated_at timestamp
+   updated_at timestamp,
+   version integer,
+   locked_until timestamp
 );
 
 CREATE TABLE resource (
@@ -21,6 +23,8 @@ CREATE TABLE resource (
 );
 
 delete from request_record;
+
+drop table request_record;
 
 go get github.com/lib/pq
 go get github.com/rs/zerolog

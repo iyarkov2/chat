@@ -22,7 +22,8 @@ const (
 )
 
 var db *sql.DB
-var service i.EmbeddedService
+var embeddedService i.EmbeddedService
+var standaloneService i.StandaloneService
 var log zerolog.Logger
 
 
@@ -52,24 +53,33 @@ func setUp() {
 	checkError(err)
 	log.Info().Msg("Connected")
 
-	// Connect
-	conn, err := db.Conn(context.Background())
-
 	// Clean up tables
+	conn, err := db.Conn(context.Background())
 	cleanup("request_record", conn, log)
 	cleanup("resource", conn, log)
+	err = conn.Close()
+	checkError(err)
 
 	// Create EmbeddedService
-	conf := i.EmbeddedServiceConfig {
+	embeddedServiceConfig := i.EmbeddedServiceConfig {
 		TableName: "request_record",
 		RetentionPeriodSec: 3600,
 	}
-
-	service, err = i.NewEmbeddedService(context.Background(), db, conf)
+	embeddedService, err = i.NewEmbeddedService(context.Background(), db, embeddedServiceConfig)
 	checkError(err)
 
-	err = conn.Close()
+	// Create StandaloneService
+	standaloneServiceConfig := i.StandaloneServiceConfig {
+		EmbeddedServiceConfig : i.EmbeddedServiceConfig {
+			TableName: "request_record",
+			RetentionPeriodSec: 3600,
+		},
+		LockWaitTimeout: 5 * time.Second,
+		LockTimeout: 30 * time.Second,
+	}
+	standaloneService, err = i.NewStandaloneService(context.Background(), db, standaloneServiceConfig)
 	checkError(err)
+
 	log.Info().Msg("Init completed")
 }
 
@@ -94,6 +104,11 @@ func tearDown() {
 
 // A mock operation, does not do anything, it waits for a second to emulate a long operations and also inserts a record into the DB
 func operation(requestId string, goroutineId string, withFail bool) {
+	//operationEmbedded(requestId, goroutineId, withFail)
+	operationStandalone(requestId, goroutineId, withFail)
+}
+
+func operationEmbedded(requestId string, goroutineId string, withFail bool) {
 	requestLog := zerolog.New(zerolog.ConsoleWriter {Out: os.Stdout, TimeFormat: "2006-01-02T15:04:0543"}).With().Timestamp().Logger().With().Str("id", goroutineId).Logger()
 	ctx := context.WithValue(context.Background(), "log", requestLog)
 
@@ -103,7 +118,7 @@ func operation(requestId string, goroutineId string, withFail bool) {
 	checkError(err)
 	requestLog.Info().Msg("New connection opened")
 
-	// Start a transaction - experimented with bot
+	// Start a transaction - experimented with both ReadCommitted and Serializable, current impl does not work for Serializable
 	opts := sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 		// Isolation: sql.LevelSerializable,
@@ -114,7 +129,7 @@ func operation(requestId string, goroutineId string, withFail bool) {
 	requestLog.Info().Msg("Transaction Started")
 
 	// Get the record
-	record, err := service.Get(ctx, tx, requestId)
+	record, err := embeddedService.Get(ctx, tx, requestId)
 	checkError(err)
 
 	if record.Result == nil {
@@ -129,7 +144,7 @@ func operation(requestId string, goroutineId string, withFail bool) {
 
 		result := fmt.Sprintf("Time: %s", time.Now())
 		record.Result = []byte(result)
-		err = service.Set(ctx, tx, record)
+		err = embeddedService.Set(ctx, tx, record)
 		checkError(err)
 		requestLog.Info().Msgf("Done, result: %s", result)
 
@@ -148,6 +163,67 @@ func operation(requestId string, goroutineId string, withFail bool) {
 		err = tx.Commit()
 		checkError(err)
 		requestLog.Info().Msg("Transaction Committed")
+	}
+}
+
+func operationStandalone(requestId string, goroutineId string, withFail bool) {
+	requestLog := zerolog.New(zerolog.ConsoleWriter {Out: os.Stdout, TimeFormat: "2006-01-02T15:04:0543"}).With().Timestamp().Logger().With().Str("id", goroutineId).Logger()
+	ctx := context.WithValue(context.Background(), "log", requestLog)
+
+	// Get the record
+	record, err := standaloneService.Get(ctx, requestId)
+	checkError(err)
+
+	if record.Result == nil {
+		requestLog.Info().Msg("New record, perform operation")
+		// Open new connection and begin a transaction
+		conn, err := db.Conn(context.Background())
+		checkError(err)
+		requestLog.Info().Msg("New connection opened")
+
+		// Start a transaction - experimented with both ReadCommitted and Serializable
+		opts := sql.TxOptions{
+			Isolation: sql.LevelReadCommitted,
+			// Isolation: sql.LevelSerializable,
+			ReadOnly: false,
+			// Question - is there a way to specify a timeout???
+		}
+		tx, err := conn.BeginTx(context.Background(), &opts)
+		checkError(err)
+		requestLog.Info().Msg("Transaction Started")
+
+		// Simulate some work
+		time.Sleep(1 * time.Second)
+
+		// Insert a record
+		something := fmt.Sprintf("Request %s, goroutine %s, withFail %t", requestId, goroutineId, withFail)
+		_, err = tx.Exec("insert into resource(something, created_at) values($1, $2)", something, time.Now())
+		checkError(err)
+
+		// Calculation result
+		result := fmt.Sprintf("Time: %s", time.Now())
+
+		if withFail {
+			err = tx.Rollback()
+			checkError(err)
+			requestLog.Info().Msg("Transaction Rolled Back")
+
+			// it failed - so release the lock without saving anything
+			err = standaloneService.Release(ctx, record)
+			checkError(err)
+		} else {
+			err = tx.Commit()
+			checkError(err)
+			requestLog.Info().Msgf("Transaction Committed, result: %s", result)
+
+			// it succeeded - Set, it also will release the lock
+			record.Result = []byte(result)
+			err = standaloneService.Set(ctx, record)
+			checkError(err)
+		}
+	} else {
+		result := string(record.Result)
+		requestLog.Info().Msgf("Already exists, use result: %s", result)
 	}
 }
 
