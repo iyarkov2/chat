@@ -252,10 +252,10 @@ func (s *standaloneService) Get(ctx context.Context, id string) (*RequestRecord,
 				// select id, result, created_at, updated_at, version, locked_until from %s where id = $1
 				e = rows.Scan(&record.Id, &record.Result, &record.createdAt, &record.updatedAt, &record.version, &record.lockedUntil)
 				if e != nil {
-					return nil, fmt.Errorf("failed to process a record, %s", e)
+					return fmt.Errorf("failed to process a record, %w", e)
 				}
 				log.Debug().Msgf("Found exist record, %s ->[%s], created at: %s, updated at: %s", record.Id, string(record.Result), record.createdAt, record.updatedAt)
-				return &record, nil
+				return nil
 			} else {
 				/*
 					This is an odd situation. We just got a unique key constraint violation, now the record is not found
@@ -265,6 +265,8 @@ func (s *standaloneService) Get(ctx context.Context, id string) (*RequestRecord,
 			}
 		})
 	}
+	// DEV NOT COMPLETED
+	return nil, nil
 }
 
 func (s *standaloneService) Set(ctx context.Context, record *RequestRecord) error {

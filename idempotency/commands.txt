@@ -1,6 +1,6 @@
 docker pull postgres
 
-docker run --name postgres -p 5432:5432 -e POSTGRES_PASSWORD=Test123!  -d postgres
+docker run --name postgres -p 5432:5432 -e POSTGRES_HOST_AUTH_METHOD=trust -d postgres
 
 docker stop postgres
 docker rm -v postgres
@@ -28,3 +28,7 @@ drop table request_record;
 
 go get github.com/lib/pq
 go get github.com/rs/zerolog
+
+CREATE TABLE tbl2 (
+  name varchar(255),
+);

@@ -6,8 +6,6 @@ import (
 )
 
 func main() {
-	fmt.Println("Hello")
-
 	root := fmt.Errorf("root error")
 
 	wrapper1 := fmt.Errorf("w1 caused by %w", root)

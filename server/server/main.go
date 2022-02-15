@@ -7,9 +7,8 @@ import (
 	"log"
 	"net"
 
-	"google.golang.org/grpc"
-
 	"github.com/iyarkov2/chat/server/api"
+	"google.golang.org/grpc"
 )
 
 type chatServer struct {
@@ -55,8 +54,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	var opts []grpc.ServerOption
-	grpcServer := grpc.NewServer(opts...)
+	log.Printf("API version %s\n", api.Version)
+	grpcServer := grpc.NewServer(api.WithServerVersion())
 	api.RegisterChatServiceServer(grpcServer, newServer())
 	err2 := grpcServer.Serve(lis)
 	if err != nil {

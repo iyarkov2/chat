@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -90,7 +91,7 @@ func main() {
 			//"google/iam/v1/policy.proto",
 			//"google/iam/v1/iam_policy.proto",
 			//"google/longrunning/operations.proto",
-			//"google/cloud/functions/v1/functions.proto",
+			"version.proto",
 			"chat.proto",
 		}
 		for _, f := range files {
@@ -105,9 +106,29 @@ func main() {
 		Uncomment lines below if you would like to peek inside protoregistry
 	*/
 	//protoregistry.GlobalFiles.RangeFiles(func (fd protoreflect.FileDescriptor) bool {
-	//	fmt.Printf("%v\n\n", fd)
+	//	fmt.Printf("%v\n", fd)
+	//	fmt.Printf("Options: %v\n\n", fd.Options());
 	//	return true
 	//})
+
+	fd, err := protoregistry.GlobalFiles.FindFileByPath("chat.proto")
+	if err != nil {
+		panic(errors.Wrapf(err, "Descriptor api.version not found"))
+	}
+
+	versiond, err := protoregistry.GlobalFiles.FindDescriptorByName("iyarkov2.chat.api.version")
+	if err != nil {
+		panic(errors.Wrapf(err, "Version Descriptor not found"))
+	}
+	fmt.Printf("\u001B[32m Version Descriptor\u001B[0m %v\n", versiond)
+	options := fd.Options().(*descriptorpb.FileOptions)
+	fmt.Printf("\u001B[32mAPI OPtions\u001B[0m %v\n", options)
+
+	ed :=fd.Options().(*descriptorpb.FileOptions)
+	//fmt.Printf("\u001B[32mAed\u001B[0m %v\n", ed.ProtoMessage())
+
+	v := protoreflect.ValueOfMessage(ed.ProtoReflect())
+	fmt.Printf("\u001B[32mC\u001B[0m %v\n", v)
 
 	/*
 		Step 2.a - read binary message from a file. It could be any binary blob or stream - a database, Kafka message, etc
@@ -177,11 +198,15 @@ func main() {
 		fmt.Printf("\u001B[32mOut Message Descriptor\u001B[0m %v\n\n", responseD)
 		response := dynamicpb.NewMessage(responseD.(protoreflect.MessageDescriptor))
 
-		invokeError := conn.Invoke(context.Background(), "/iyarkov2.chat.api.ChatService/Connect", request, response)
+		md := metadata.New(make(map[string]string))
+		header := grpc.Header(&md)
+		invokeError := conn.Invoke(context.Background(), "/iyarkov2.chat.api.ChatService/Connect", request, response, header)
 		if invokeError != nil {
 			panic(errors.Wrapf(invokeError, "Invoke error"))
 		}
 		fmt.Printf("Response: [%v]\n", response)
+		fmt.Printf("Version: [%v]\n", md)
+		fmt.Printf("Version: %s\n", md["api-version"])
 
 		idField := response.Descriptor().Fields().ByName("user_id")
 		value := response.Get(idField)
@@ -199,4 +224,6 @@ func main() {
 		//response.Get(fieldDoesNotExist)
 	}
 
+
 }
+

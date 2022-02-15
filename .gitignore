@@ -3,3 +3,4 @@ out/
 client/api
 server/api
 env.sh
+/local_config

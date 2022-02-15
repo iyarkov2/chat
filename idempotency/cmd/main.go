@@ -17,7 +17,6 @@ const (
 	host     = "localhost"
 	port     = 5432
 	user     = "postgres"
-	password = "Test123!"
 	dbname   = "postgres"
 )
 
@@ -41,7 +40,7 @@ func setUp() {
 	log = zerolog.New(zerolog.ConsoleWriter {Out: os.Stdout, TimeFormat: "2006-01-02T15:04:0543"}).With().Timestamp().Logger()
 	log.Info().Msg("Init")
 	// connection string
-	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=disable", host, port, user, dbname)
 
 	var err error
 	// open database
