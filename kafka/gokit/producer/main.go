@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/cloudevents/sdk-go/v2/event/datacodec"
 	"github.com/getbread/gokit/messaging"
 	"github.com/getbread/gokit/requestid"
 	"github.com/google/uuid"
@@ -64,6 +63,21 @@ func experimentParallel() {
 	app.Log.Info().Msg("Done")
 }
 
+func encode(ctx context.Context, schemaID uint32, in interface{}, codec *goavro.Codec) ([]byte, error) {
+	prefix := make([]byte, 5)
+	prefix[0] = 0 // magic byte
+	binary.BigEndian.PutUint32(prefix[1:], schemaID) // Schema ID
+	body, err := codec.BinaryFromNative(nil, in)
+	if err != nil {
+	return nil, err
+	}
+	result := make([]byte, len(prefix) + len(body))
+	_ = copy(result, prefix)
+	_ = copy(result[5:], body)
+	app.Log.Info().Msg("Encoding done")
+	return result, nil
+}
+
 func publish() {
 	var codec *goavro.Codec
 	app.Must("New Codec", func() error {
@@ -80,20 +94,12 @@ func publish() {
 		return err
 	})
 
-	datacodec.AddEncoder("bread/avro", func(ctx context.Context, in interface{}) ([]byte, error) {
-		prefix := make([]byte, 5)
-		prefix[0] = 0 // magic byte
-		binary.BigEndian.PutUint32(prefix[1:], 1) // Schema ID
-		body, err := codec.BinaryFromNative(nil, in)
-		if err != nil {
-			return nil, err
-		}
-		result := make([]byte, len(prefix) + len(body))
-		_ = copy(result, prefix)
-		_ = copy(result[5:], body)
-		return result, nil
-	})
-
+	const SchemaID = 100002
+	//
+	//datacodec.AddEncoder("bread/avro", func(ctx context.Context, in interface{}) ([]byte, error) {
+	//	return encode(ctx, SchemaID, in, codec)
+	//})
+	//
 	id := uuid.New()
 	app.WithTimer("Publish " + id.String(), func() error {
 		ctx, err := requestid.SetOnContext(context.Background(), id)
@@ -111,19 +117,24 @@ func publish() {
 		e.SetExtension("CreatedAt", time.Now().String())
 		e.SetExtension("PublishedAt", time.Now().String())
 		e.SetExtension("PublisherID", "test-node-1")
-		e.SetExtension("SchemaID", 123)
+		e.SetExtension("SchemaID", SchemaID)
 
-		e.SetExtension("SchemaVersion", 4)
+		e.SetExtension("SchemaVersion", 2)
 		e.SetExtension("Entity", "FooBar")
 		e.SetExtension("EntityID", "0000-1111-2222")
 		e.SetExtension("Action", "Pull")
 
-		err = e.SetData("bread/avro", map[string]interface{} {
-			"name": "My Record",
-		})
+
+		value := map[string]interface{} {
+			"name": "Non-ASCII text - Привет, encoded by Event",
+		}
+
+		data, err := encode(ctx, SchemaID, value, codec)
 		if err != nil {
 			return err
 		}
+		err = e.SetData("bread/avro", data)
+
 		return publisher.Publish(ctx, e)
 	})
 }
